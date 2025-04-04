@@ -1,6 +1,5 @@
 import { Account, Avatars, Client, Databases } from "node-appwrite";
 import { appwriteConfig } from "./config";
-import { cookies } from "next/headers";
 
 export const createAdminClient = async () => {
   const client = new Client()

@@ -1,5 +1,12 @@
 "use client";
 
+import { useState } from "react";
+import { useKindeBrowserClient } from "@kinde-oss/kinde-auth-nextjs";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Plus, CalendarClock, CheckCircle } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,10 +16,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -21,141 +33,267 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useKindeBrowserClient } from "@kinde-oss/kinde-auth-nextjs";
+import { taskDataSchema } from "@/types";
+import { createAdminClient } from "@/lib/appwrite";
+
+// Helper function to format Date object to datetime-local input format
+function formatDateForInput(date: Date | undefined): string {
+  if (!date) return "";
+  // Format as YYYY-MM-DDThh:mm (datetime-local input format)
+  return date.toISOString().slice(0, 16);
+}
 
 export function AddTaskDialog() {
-  const [form, setForm] = useState({
-    task: "",
-    description: "",
-    categoryId: "",
-    dueDate: "",
-    priority: "medium" as "low" | "medium" | "high",
-    completed: false,
+  const [open, setOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { user } = useKindeBrowserClient();
+  // Define form with proper schema
+  const form = useForm<z.infer<typeof taskDataSchema>>({
+    resolver: zodResolver(taskDataSchema),
+    defaultValues: {
+      task: "",
+      description: "",
+      categoryId: "",
+      kinde_Id: "", // Will be set during submit
+      taskId: "", // Will be generated during submit
+      dueDate: undefined,
+      reminder: new Date(), // Default value, will be auto-managed
+      priority: "medium",
+      completed: false,
+    },
   });
 
-  const { user, isLoading } = useKindeBrowserClient();
-  const [userId, setUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isLoading && user) {
-      setUserId(user.id);
-    }
-  }, [user, isLoading]);
-
-  const handleSubmit = async () => {
-    if (!user?.id || !task.trim()) return;
+  async function onSubmit(values: z.infer<typeof taskDataSchema>) {
+    if (!user?.id) return;
 
     setIsLoading(true);
     try {
-      const { databases } = createAdminClient();
-      await databases.createDocument(/* ... */);
-      // Optional: Refresh task list here
+      if (!values.taskId) {
+        values.taskId = crypto.randomUUID();
+      }
+      // Assign the kinde_Id from the authenticated user
+      values.kinde_Id = user.id;
+
+      // Auto-set reminder based on dueDate (if needed)
+      if (values.dueDate) {
+        const reminderDate = new Date(values.dueDate);
+        reminderDate.setHours(reminderDate.getHours() - 1); // 1 hour before due date
+        values.reminder = reminderDate;
+      }
+      // Replace with your actual database logic
+      const { databases } = await createAdminClient();
+
+      const response = await databases.createDocument(
+        !process.env.NEXT_PUBLIC_APPWRITE_DATABASE,
+        !process.env.NEXT_PUBLIC_APPWRITE_TASKS_COLLECTION, // Replace with your tasks collection ID
+        values.taskId, // Document ID (unique identifier)
+        {
+          task: values.task,
+          description: values.description,
+          categoryId: values.categoryId,
+          kinde_Id: values.kinde_Id,
+          dueDate: values.dueDate,
+          reminder: values.reminder,
+          priority: values.priority,
+          completed: values.completed,
+        }
+      );
+
+      console.log("Task created successfully:", response);
+      // Reset form and close dialog after successful submission
+      form.reset();
+      setOpen(false);
     } catch (error) {
       console.error("Failed to add task:", error);
     } finally {
       setIsLoading(false);
-      setOpen(false);
     }
-  };
+  }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2">
+        <Button
+          variant="outline"
+          className="gap-2 shadow-sm hover:shadow-md transition-shadow"
+        >
           <Plus className="h-4 w-4" /> Add Task
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] rounded-lg p-6 shadow-xl">
         <DialogHeader>
-          <DialogTitle className="text-center">Create New Task</DialogTitle>
+          <DialogTitle className="text-center text-xl font-bold">
+            Create New Task
+          </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          {/* Task Title */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="task" className="text-right">
-              Task*
-            </Label>
-            <Input
-              id="task"
-              value={form.task}
-              onChange={(e) => setForm({ ...form, task: e.target.value })}
-              className="col-span-3"
-              required
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Task Title */}
+            <FormField
+              control={form.control}
+              name="task"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-medium">Task Name*</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Enter task title"
+                      {...field}
+                      className="transition-all focus-visible:ring-2 focus-visible:ring-offset-1"
+                    />
+                  </FormControl>
+                  <FormMessage className="text-sm" />
+                </FormItem>
+              )}
             />
-          </div>
 
-          {/* Description */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="description" className="text-right">
-              Description
-            </Label>
-            <Textarea
-              id="description"
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              className="col-span-3"
+            {/* Description */}
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-medium">Description</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Enter task description"
+                      {...field}
+                      className="min-h-24 transition-all focus-visible:ring-2 focus-visible:ring-offset-1"
+                    />
+                  </FormControl>
+                  <FormMessage className="text-sm" />
+                </FormItem>
+              )}
             />
-          </div>
 
-          {/* Category */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">Category*</Label>
-            <Select
-              value={form.categoryId}
-              onValueChange={(value) => setForm({ ...form, categoryId: value })}
-            >
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="work">Work</SelectItem>
-                <SelectItem value="personal">Personal</SelectItem>
-                <SelectItem value="shopping">Shopping</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            {/* Due Date and Priority in a 2-column layout */}
+            <div className="grid grid-cols-2 gap-6">
+              {/* Due Date */}
+              <FormField
+                control={form.control}
+                name="dueDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="font-medium flex items-center gap-1.5">
+                      <CalendarClock className="h-4 w-4" /> Due Date
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="datetime-local"
+                        value={formatDateForInput(field.value)}
+                        onChange={(e) => {
+                          // Convert the string date to a Date object
+                          const date = e.target.value
+                            ? new Date(e.target.value)
+                            : undefined;
+                          field.onChange(date);
+                        }}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                        className="transition-all focus-visible:ring-2 focus-visible:ring-offset-1"
+                      />
+                    </FormControl>
+                    <FormMessage className="text-sm" />
+                  </FormItem>
+                )}
+              />
 
-          {/* Due Date */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="dueDate" className="text-right">
-              Due Date
-            </Label>
-            <Input
-              id="dueDate"
-              type="datetime-local"
-              value={form.dueDate}
-              onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-              className="col-span-3"
+              {/* Priority */}
+              <FormField
+                control={form.control}
+                name="priority"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="font-medium flex items-center gap-1.5">
+                      <CheckCircle className="h-4 w-4" /> Priority
+                    </FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="transition-all focus-visible:ring-2 focus-visible:ring-offset-1">
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem
+                          value="low"
+                          className="flex items-center gap-2"
+                        >
+                          <span className="h-2 w-2 rounded-full bg-blue-400"></span>{" "}
+                          Low
+                        </SelectItem>
+                        <SelectItem
+                          value="medium"
+                          className="flex items-center gap-2"
+                        >
+                          <span className="h-2 w-2 rounded-full bg-yellow-400"></span>{" "}
+                          Medium
+                        </SelectItem>
+                        <SelectItem
+                          value="high"
+                          className="flex items-center gap-2"
+                        >
+                          <span className="h-2 w-2 rounded-full bg-red-400"></span>{" "}
+                          High
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-sm" />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Category */}
+            <FormField
+              control={form.control}
+              name="categoryId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="font-medium">Category*</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="transition-all focus-visible:ring-2 focus-visible:ring-offset-1">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="work">Work</SelectItem>
+                      <SelectItem value="personal">Personal</SelectItem>
+                      <SelectItem value="shopping">Shopping</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage className="text-sm" />
+                </FormItem>
+              )}
             />
-          </div>
 
-          {/* Priority */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">Priority</Label>
-            <Select
-              value={form.priority}
-              onValueChange={(value: "low" | "medium" | "high") =>
-                setForm({ ...form, priority: value })
-              }
-            >
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button type="button" onClick={handleSubmit}>
-            Create Task
-          </Button>
-        </DialogFooter>
+            <DialogFooter className="mt-8 pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+                className="transition-all hover:bg-gray-100"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="ml-2 transition-all shadow-sm hover:shadow-md"
+              >
+                {isLoading ? "Creating..." : "Create Task"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
