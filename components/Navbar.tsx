@@ -9,6 +9,7 @@ import Image from "next/image";
 const Navbar = async () => {
   const { getUser } = await getKindeServerSession();
   const user = await getUser();
+  console.log(user.id);
   return (
     <header className="w-full py-4">
       <nav className="flex items-center justify-between w-full container mx-auto ">

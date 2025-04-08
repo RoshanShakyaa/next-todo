@@ -6,7 +6,6 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, CalendarClock, CheckCircle } from "lucide-react";
-import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,7 +33,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { taskDataSchema } from "@/types";
-import { createAdminClient } from "@/lib/appwrite";
 
 // Helper function to format Date object to datetime-local input format
 function formatDateForInput(date: Date | undefined): string {
@@ -45,7 +43,6 @@ function formatDateForInput(date: Date | undefined): string {
 
 export function AddTaskDialog() {
   const [open, setOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const { user } = useKindeBrowserClient();
   // Define form with proper schema
   const form = useForm<z.infer<typeof taskDataSchema>>({
@@ -65,49 +62,7 @@ export function AddTaskDialog() {
 
   async function onSubmit(values: z.infer<typeof taskDataSchema>) {
     if (!user?.id) return;
-
-    setIsLoading(true);
-    try {
-      if (!values.taskId) {
-        values.taskId = crypto.randomUUID();
-      }
-      // Assign the kinde_Id from the authenticated user
-      values.kinde_Id = user.id;
-
-      // Auto-set reminder based on dueDate (if needed)
-      if (values.dueDate) {
-        const reminderDate = new Date(values.dueDate);
-        reminderDate.setHours(reminderDate.getHours() - 1); // 1 hour before due date
-        values.reminder = reminderDate;
-      }
-      // Replace with your actual database logic
-      const { databases } = await createAdminClient();
-
-      const response = await databases.createDocument(
-        !process.env.NEXT_PUBLIC_APPWRITE_DATABASE,
-        !process.env.NEXT_PUBLIC_APPWRITE_TASKS_COLLECTION, // Replace with your tasks collection ID
-        values.taskId, // Document ID (unique identifier)
-        {
-          task: values.task,
-          description: values.description,
-          categoryId: values.categoryId,
-          kinde_Id: values.kinde_Id,
-          dueDate: values.dueDate,
-          reminder: values.reminder,
-          priority: values.priority,
-          completed: values.completed,
-        }
-      );
-
-      console.log("Task created successfully:", response);
-      // Reset form and close dialog after successful submission
-      form.reset();
-      setOpen(false);
-    } catch (error) {
-      console.error("Failed to add task:", error);
-    } finally {
-      setIsLoading(false);
-    }
+    console.log("Form values:", values);
   }
 
   return (
@@ -286,10 +241,9 @@ export function AddTaskDialog() {
               </Button>
               <Button
                 type="submit"
-                disabled={isLoading}
                 className="ml-2 transition-all shadow-sm hover:shadow-md"
               >
-                {isLoading ? "Creating..." : "Create Task"}
+                Create Task
               </Button>
             </DialogFooter>
           </form>

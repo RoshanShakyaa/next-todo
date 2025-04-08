@@ -1,0 +1,53 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+
+
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  kinde_id  String
+  name      String
+  color     String?  // Optional hex color code
+  icon      String?  // Optional icon identifier
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  tasks     Tasks[]  // Relation to tasks
+
+  @@index([kinde_id]) // Index for faster queries by user
+}
+
+model Tasks {
+  id          String   @id @default(uuid())
+  kinde_id    String
+  category    Category @relation(fields: [category_id], references: [id])
+  category_id String
+  task        String
+  description String
+  completed   Boolean
+  due_date    DateTime
+  priority    Priority
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([kinde_id])
+  @@index([category_id])
+}

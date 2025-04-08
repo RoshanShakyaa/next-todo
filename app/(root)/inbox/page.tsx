@@ -1,12 +1,30 @@
 import { AddTaskDialog } from "@/components/add-task-dialog";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DialogTrigger } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { prisma } from "@/lib/utils";
 import React from "react";
 
-const page = () => {
+async function getData() {
+  const data = await prisma.tasks.findMany({
+    select: {
+      id: true,
+      task: true,
+      description: true,
+      due_date: true,
+      category_id: true,
+      priority: true,
+      completed: true,
+      created_at: true,
+      updated_at: true,
+    },
+  });
+
+  return data;
+}
+
+const page = async () => {
+  const todos = await getData();
+  console.log(todos);
   const data = {
     task: [
       {
